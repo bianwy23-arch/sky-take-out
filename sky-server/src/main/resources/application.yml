@@ -37,3 +37,9 @@ sky:
     admin-ttl: 7200000000000
     # 设置前端传递过来的令牌名称
     admin-token-name: token
+
+  alioss:
+    endpoint: ${sky.alioss.endpoint} # 确保和你创建 Bucket 时选的地域一致
+    access-key-id: ${sky.alioss.access-key-id} # 填入刚才拿到的 ID
+    access-key-secret: ${sky.alioss.access-key-secret} # 填入刚才拿到的 Secret
+    bucket-name: ${sky.alioss.bucket-name} # 填入你创建的 Bucket 名字

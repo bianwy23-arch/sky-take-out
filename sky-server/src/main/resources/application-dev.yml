@@ -6,3 +6,9 @@ sky:
     database: sky_take_out
     username: root
     password: 123456
+
+  alioss:
+    endpoint: oss-cn-beijing.aliyuncs.com # 确保和你创建 Bucket 时选的地域一致
+    access-key-id: LTAI5t86wNQHeBqLhq1cJUEx # 填入刚才拿到的 ID
+    access-key-secret: uuaMxLaHRWoxxlmjsebNYHsrcI20XM # 填入刚才拿到的 Secret
+    bucket-name: sky-takeout-bwy # 填入你创建的 Bucket 名字
