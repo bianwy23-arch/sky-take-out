@@ -12,3 +12,14 @@ sky:
     access-key-id: LTAI5t86wNQHeBqLhq1cJUEx # 填入刚才拿到的 ID
     access-key-secret: uuaMxLaHRWoxxlmjsebNYHsrcI20XM # 填入刚才拿到的 Secret
     bucket-name: sky-takeout-bwy # 填入你创建的 Bucket 名字
+
+
+  redis:
+    host: 127.0.0.1
+    port: 6379
+    password: 123456 # 默认使用 0 号数据库
+    database: 0
+
+  wechat:
+    appid: wxa6166d088d6647b6
+    secret: 4d195f2975e378ff2eaad968d9921e6a

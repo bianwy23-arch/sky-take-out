@@ -16,6 +16,9 @@ import java.util.List;
 @Mapper
 public interface DishMapper {
 
+
+    List<Dish> getBySetmealId(Long id);
+
     /**
      * 根据分类id查询菜品数量
      * @param categoryId
@@ -63,4 +66,12 @@ public interface DishMapper {
 
     @AutoFill(value = OperationType.UPDATE)
     void update(Dish dish);
+
+
+    /**
+     * 根据条件查询菜品数据
+     * @param dish
+     * @return
+     */
+    List<Dish> list(Dish dish);
 }

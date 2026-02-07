@@ -12,6 +12,11 @@ spring:
       url: jdbc:mysql://${sky.datasource.host}:${sky.datasource.port}/${sky.datasource.database}?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true
       username: ${sky.datasource.username}
       password: ${sky.datasource.password}
+  redis:
+    host: ${sky.redis.host}
+    port: ${sky.redis.port}
+    password: ${sky.redis.password}
+    database: ${sky.redis.database}
 
 mybatis:
   #mapper配置文件
@@ -38,8 +43,17 @@ sky:
     # 设置前端传递过来的令牌名称
     admin-token-name: token
 
+    # 用户
+    user-secret-key: itheima
+    user-ttl: 720000000000000
+    user-token-name: authentication
+
   alioss:
     endpoint: ${sky.alioss.endpoint} # 确保和你创建 Bucket 时选的地域一致
     access-key-id: ${sky.alioss.access-key-id} # 填入刚才拿到的 ID
     access-key-secret: ${sky.alioss.access-key-secret} # 填入刚才拿到的 Secret
     bucket-name: ${sky.alioss.bucket-name} # 填入你创建的 Bucket 名字
+
+  wechat:
+    appid: ${sky.wechat.appid}
+    secret: ${sky.wechat.secret}
