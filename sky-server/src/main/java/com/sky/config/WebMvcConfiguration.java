@@ -2,6 +2,8 @@ package com.sky.config;
 
 import com.sky.interceptor.JwtTokenAdminInterceptor;
 import com.sky.interceptor.JwtTokenUserInterceptor;
+import com.sky.interceptor.RateLimitInterceptor;
+import com.sky.interceptor.UVPVInterceptor;
 import com.sky.json.JacksonObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +34,10 @@ public class WebMvcConfiguration extends WebMvcConfigurationSupport {
     private JwtTokenAdminInterceptor jwtTokenAdminInterceptor;
     @Autowired
     private JwtTokenUserInterceptor jwtTokenUserInterceptor;
+    @Autowired
+    private UVPVInterceptor uvpvInterceptor;
+    @Autowired
+    private RateLimitInterceptor rateLimitInterceptor;
 
     /**
      * 注册自定义拦截器
@@ -45,6 +51,16 @@ public class WebMvcConfiguration extends WebMvcConfigurationSupport {
                 .excludePathPatterns("/admin/employee/login");
 
         registry.addInterceptor(jwtTokenUserInterceptor)
+                .addPathPatterns("/user/**")
+                .excludePathPatterns("/user/user/login")
+                .excludePathPatterns("/user/shop/status");
+
+        registry.addInterceptor(rateLimitInterceptor)
+                .addPathPatterns("/user/**")
+                .excludePathPatterns("/user/user/login")
+                .excludePathPatterns("/user/shop/status");
+
+        registry.addInterceptor(uvpvInterceptor)
                 .addPathPatterns("/user/**")
                 .excludePathPatterns("/user/user/login")
                 .excludePathPatterns("/user/shop/status");

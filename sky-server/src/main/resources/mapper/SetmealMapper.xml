@@ -27,7 +27,7 @@
 
 
     <delete id="deleteByIds">
-        delete from sky_take_out.setmeal where id in
+        delete from setmeal where id in
                                          <foreach collection="ids" open="(" close=")" separator="," item="id">
                                              #{id}
                                          </foreach>

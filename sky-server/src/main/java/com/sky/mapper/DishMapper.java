@@ -9,6 +9,7 @@ import com.sky.enumeration.OperationType;
 import com.sky.vo.DishVO;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
@@ -74,4 +75,24 @@ public interface DishMapper {
      * @return
      */
     List<Dish> list(Dish dish);
+
+    /**
+     * 预占库存：可用库存减少，锁定库存增加
+     */
+    int lockStock(@Param("dishId") Long dishId, @Param("num") Integer num, @Param("version") Integer version);
+
+    /**
+     * 确认扣减：支付成功后从锁定库存扣除
+     */
+    int confirmLockedStock(@Param("dishId") Long dishId, @Param("num") Integer num, @Param("version") Integer version);
+
+    /**
+     * 回补库存：取消订单时释放锁定库存到可用库存
+     */
+    int releaseStock(@Param("dishId") Long dishId, @Param("num") Integer num, @Param("version") Integer version);
+
+    /**
+     * 退还已确认库存：支付后取消/拒单时恢复可用库存（此时 stock_locked 已为 0，只需加回 stock_available）
+     */
+    int restoreConfirmedStock(@Param("dishId") Long dishId, @Param("num") Integer num, @Param("version") Integer version);
 }

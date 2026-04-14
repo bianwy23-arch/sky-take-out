@@ -27,6 +27,9 @@ public class OrderDetail implements Serializable {
     //订单id
     private Long orderId;
 
+    // 分片键（与 orders.user_id 相同，保证路由到同一分片）
+    private Long userId;
+
     //菜品id
     private Long dishId;
 
@@ -45,3 +48,4 @@ public class OrderDetail implements Serializable {
     //图片
     private String image;
 }
+

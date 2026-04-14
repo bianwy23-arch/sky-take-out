@@ -53,4 +53,17 @@ public interface DishService {
     List<DishVO> listWithFlavor(Dish dish);
 
     void startOrStop(Integer status, Long id);
+
+    /**
+     * ES 关键词搜索起售中菜品
+     * @param keyword 搜索关键词
+     * @return 匹配的菜品列表
+     */
+    List<DishVO> searchByKeyword(String keyword);
+
+    /**
+     * 将所有菜品批量同步到 ES（一次性初始化）
+     * @return 同步条数
+     */
+    int syncAllDishesToEs();
 }

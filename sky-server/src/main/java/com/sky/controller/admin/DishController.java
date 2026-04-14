@@ -1,5 +1,6 @@
 package com.sky.controller.admin;
 
+import com.github.benmanes.caffeine.cache.Cache;
 import com.sky.dto.DishDTO;
 import com.sky.dto.DishPageQueryDTO;
 import com.sky.entity.Dish;
@@ -10,6 +11,7 @@ import com.sky.vo.DishVO;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RBloomFilter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.*;
@@ -26,6 +28,10 @@ public class DishController {
     private DishService dishService;
     @Autowired
     private RedisTemplate redisTemplate;
+    @Autowired
+    private Cache<String, List<DishVO>> dishLocalCache;
+    @Autowired
+    private RBloomFilter<Long> categoryBloomFilter;
     @PostMapping
     @ApiOperation("新增菜品")
     public Result save(@RequestBody DishDTO dishDTO){
@@ -34,6 +40,8 @@ public class DishController {
         String key="dish_"+dishDTO.getCategoryId();
         //清理缓存数据
         cleanCacheData(key);
+        // 新增菜品的分类加入布隆过滤器
+        categoryBloomFilter.add(dishDTO.getCategoryId());
         return Result.success();
     }
 
@@ -99,8 +107,27 @@ public class DishController {
         return Result.success();
     }
 
-    private void  cleanCacheData(String pattern){
-        Set keys = redisTemplate.keys(pattern);
-        redisTemplate.delete(keys);
+    @PostMapping("/es/init")
+    @ApiOperation("批量同步所有菜品到 ES（一次性初始化）")
+    public Result<Integer> syncDishesToEs() {
+        log.info("批量同步所有菜品到 ES");
+        int count = dishService.syncAllDishesToEs();
+        return Result.success(count);
+    }
+
+    private void cleanCacheData(String pattern) {
+        // 用 SCAN 替代 KEYS，避免阻塞 Redis 单线程
+        Set<String> keys = new java.util.HashSet<>();
+        org.springframework.data.redis.core.ScanOptions options =
+                org.springframework.data.redis.core.ScanOptions.scanOptions().match(pattern).count(100).build();
+        try (org.springframework.data.redis.core.Cursor<String> cursor =
+                     redisTemplate.scan(options)) {
+            cursor.forEachRemaining(keys::add);
+        }
+        if (!keys.isEmpty()) {
+            redisTemplate.delete(keys);
+        }
+        // 同步清理 Caffeine 本地缓存
+        dishLocalCache.invalidateAll();
     }
 }

@@ -74,4 +74,41 @@
         WHERE
             sd.setmeal_id = #{setmealId}
     </select>
+
+    <update id="lockStock">
+        update dish
+        set stock_available = stock_available - #{num},
+            stock_locked = stock_locked + #{num},
+            version = version + 1
+        where id = #{dishId}
+          and version = #{version}
+          and stock_available >= #{num}
+    </update>
+
+    <update id="confirmLockedStock">
+        update dish
+        set stock_locked = stock_locked - #{num},
+            version = version + 1
+        where id = #{dishId}
+          and version = #{version}
+          and stock_locked >= #{num}
+    </update>
+
+    <update id="releaseStock">
+        update dish
+        set stock_available = stock_available + #{num},
+            stock_locked = stock_locked - #{num},
+            version = version + 1
+        where id = #{dishId}
+          and version = #{version}
+          and stock_locked >= #{num}
+    </update>
+
+    <update id="restoreConfirmedStock">
+        update dish
+        set stock_available = stock_available + #{num},
+            version = version + 1
+        where id = #{dishId}
+          and version = #{version}
+    </update>
 </mapper>

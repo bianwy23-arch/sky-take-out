@@ -6,6 +6,14 @@
         insert into shopping_cart (name, user_id, dish_id, setmeal_id, dish_flavor, number, amount, image,create_time)
         values (#{name}, #{userId}, #{dishId}, #{setmealId}, #{dishFlavor}, #{number}, #{amount}, #{image},#{createTime})
     </insert>
+
+    <insert id="insertBatch">
+        insert into shopping_cart (name, user_id, dish_id, setmeal_id, dish_flavor, number, amount, image,create_time)
+        values
+        <foreach collection="list" item="shoppingCart" separator=",">
+            (#{shoppingCart.name}, #{shoppingCart.userId}, #{shoppingCart.dishId}, #{shoppingCart.setmealId}, #{shoppingCart.dishFlavor}, #{shoppingCart.number}, #{shoppingCart.amount}, #{shoppingCart.image},#{shoppingCart.createTime})
+        </foreach>
+    </insert>
     <delete id="deleteByUserId">
         delete from shopping_cart where user_id=#{userId}
     </delete>
@@ -29,4 +37,6 @@
         </if>
         </where>
     </select>
+
+
 </mapper>

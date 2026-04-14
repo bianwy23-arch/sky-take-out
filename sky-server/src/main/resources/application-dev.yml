@@ -3,7 +3,7 @@ sky:
     driver-class-name: com.mysql.cj.jdbc.Driver
     host: localhost
     port: 3306
-    database: sky_take_out
+    database: take_out_v2
     username: root
     password: 123456
 
@@ -23,3 +23,134 @@ sky:
   wechat:
     appid: wxa6166d088d6647b6
     secret: 4d195f2975e378ff2eaad968d9921e6a
+
+  rabbitmq:
+    host: 127.0.0.1
+    port: 5672
+    username: guest
+    password: guest
+    virtual-host: /
+
+  mq:
+    exchange: sky.order.event.exchange
+    queue: sky.order.event.queue
+    logistics-queue: sky.logistics.event.queue
+    routing-key-created: order.created
+    routing-key-paid: order.paid
+    routing-key-cancelled: order.cancelled
+    routing-key-logistics-status: logistics.status
+
+# ============================================================
+# ShardingSphere 分库分表配置
+# 分片键：user_id（覆盖最高频的用户侧查询）
+# 拓扑：2 库(sky_order_0, sky_order_1) × 4 表 = 8 个分片
+# 路由：user_id % 2 决定库；user_id % 8 决定表后缀
+# ============================================================
+spring:
+  shardingsphere:
+    mode:
+      type: Standalone    # 单机模式，元数据存内存，适合本地开发
+
+    datasource:
+      names: ds_0,ds_1
+      ds_0:
+        type: com.zaxxer.hikari.HikariDataSource
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        jdbcUrl: jdbc:mysql://localhost:3306/sky_order_0?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true
+        username: root
+        password: 123456
+      ds_1:
+        type: com.zaxxer.hikari.HikariDataSource
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        jdbcUrl: jdbc:mysql://localhost:3306/sky_order_1?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true
+        username: root
+        password: 123456
+
+    rules:
+      sharding:
+        # --------- 分片表 ---------
+        tables:
+          orders:
+            actual-data-nodes: ds_$->{0..1}.orders_$->{0..7}
+            database-strategy:
+              standard:
+                sharding-column: user_id
+                sharding-algorithm-name: db-mod
+            table-strategy:
+              standard:
+                sharding-column: user_id
+                sharding-algorithm-name: table-mod
+            key-generate-strategy:
+              column: id
+              key-generator-name: snowflake
+
+          order_detail:
+            actual-data-nodes: ds_$->{0..1}.order_detail_$->{0..7}
+            database-strategy:
+              standard:
+                sharding-column: user_id
+                sharding-algorithm-name: db-mod
+            table-strategy:
+              standard:
+                sharding-column: user_id
+                sharding-algorithm-name: table-mod
+            key-generate-strategy:
+              column: id
+              key-generator-name: snowflake
+
+          pay_transaction:
+            actual-data-nodes: ds_$->{0..1}.pay_transaction_$->{0..7}
+            database-strategy:
+              standard:
+                sharding-column: user_id
+                sharding-algorithm-name: db-mod
+            table-strategy:
+              standard:
+                sharding-column: user_id
+                sharding-algorithm-name: table-mod
+            key-generate-strategy:
+              column: id
+              key-generator-name: snowflake
+
+          outbox_message:
+            actual-data-nodes: ds_$->{0..1}.outbox_message_$->{0..7}
+            database-strategy:
+              standard:
+                sharding-column: user_id
+                sharding-algorithm-name: db-mod
+            table-strategy:
+              standard:
+                sharding-column: user_id
+                sharding-algorithm-name: table-mod
+            key-generate-strategy:
+              column: id
+              key-generator-name: snowflake
+
+        # --------- 绑定表（相同 user_id 路由到同一物理分片）---------
+        binding-tables:
+          - orders,order_detail,pay_transaction,outbox_message
+
+        # --------- 分片算法 ---------
+        sharding-algorithms:
+          db-mod:
+            type: MOD
+            props:
+              sharding-count: 2
+          table-mod:
+            type: MOD
+            props:
+              sharding-count: 8
+
+        # --------- 全局 ID 生成器（雪花算法）---------
+        key-generators:
+          snowflake:
+            type: SNOWFLAKE
+            props:
+              worker-id: 1
+
+      # 非分片表：默认路由到 ds_0（dish, employee, users, address_book 等）
+      single:
+        default-data-source-name: ds_0
+
+    props:
+      sql-show: true  # 开发环境打印路由后的真实 SQL，方便调试

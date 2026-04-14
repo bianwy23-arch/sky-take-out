@@ -6,6 +6,8 @@ spring:
     active: dev
   main:
     allow-circular-references: true
+  elasticsearch:
+    uris: http://localhost:9200
   datasource:
     druid:
       driver-class-name: ${sky.datasource.driver-class-name}
@@ -17,6 +19,16 @@ spring:
     port: ${sky.redis.port}
     password: ${sky.redis.password}
     database: ${sky.redis.database}
+  rabbitmq:
+    host: ${sky.rabbitmq.host}
+    port: ${sky.rabbitmq.port}
+    username: ${sky.rabbitmq.username}
+    password: ${sky.rabbitmq.password}
+    virtual-host: ${sky.rabbitmq.virtual-host}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
 
 mybatis:
   #mapper配置文件
@@ -57,3 +69,19 @@ sky:
   wechat:
     appid: ${sky.wechat.appid}
     secret: ${sky.wechat.secret}
+
+  rabbitmq:
+    host: ${sky.rabbitmq.host}
+    port: ${sky.rabbitmq.port}
+    username: ${sky.rabbitmq.username}
+    password: ${sky.rabbitmq.password}
+    virtual-host: ${sky.rabbitmq.virtual-host}
+
+  mq:
+    exchange: ${sky.mq.exchange}
+    queue: ${sky.mq.queue}
+    logistics-queue: ${sky.mq.logistics-queue}
+    routing-key-created: ${sky.mq.routing-key-created}
+    routing-key-paid: ${sky.mq.routing-key-paid}
+    routing-key-cancelled: ${sky.mq.routing-key-cancelled}
+    routing-key-logistics-status: ${sky.mq.routing-key-logistics-status}
