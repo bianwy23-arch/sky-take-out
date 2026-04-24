@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "feng-ge-perspective": {
+      "source": "YixiaJack/feng-ge-skill",
+      "sourceType": "github",
+      "computedHash": "95732035164328e1811bd1b431b124790df67fd125dbead2ff2f5d51b5b0e1cc"
+    }
+  }
+}

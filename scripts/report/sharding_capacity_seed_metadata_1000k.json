@@ -1,0 +1,25 @@
+{
+  "generated_at": "2026-04-15T20:19:44",
+  "total_orders": 500000,
+  "details_per_order": 2,
+  "start_user_id": 200000,
+  "user_count": 120000,
+  "sample_order": {
+    "user_id": 200000,
+    "status": 5,
+    "order_id": 186625555000000,
+    "order_number": "202510172019102000000000",
+    "db_name": "sky_order_0",
+    "orders_table": "orders_0"
+  },
+  "shard_counts": {
+    "sky_order_0.orders_0": 62500,
+    "sky_order_0.orders_2": 62500,
+    "sky_order_0.orders_4": 62500,
+    "sky_order_0.orders_6": 62500,
+    "sky_order_1.orders_1": 62500,
+    "sky_order_1.orders_3": 62500,
+    "sky_order_1.orders_5": 62500,
+    "sky_order_1.orders_7": 62500
+  }
+}

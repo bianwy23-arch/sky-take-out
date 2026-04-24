@@ -1,0 +1,45 @@
+<view class="container">
+  <view class="header">
+    <text class="title">优惠券</text>
+  </view>
+
+  <!-- 可领取的优惠券列表 -->
+  <view wx:if="{{couponList.length > 0}}" class="coupon-list">
+    <view wx:for="{{couponList}}" wx:key="id" class="coupon-card {{item.grabbed ? 'grabbed' : ''}}">
+      <view class="coupon-left">
+        <text class="discount-value">¥{{item.discount}}</text>
+        <text class="threshold">满{{item.threshold}}可用</text>
+      </view>
+      <view class="coupon-right">
+        <text class="coupon-name">{{item.name}}</text>
+        <text class="coupon-time">{{item.startTime}} ~ {{item.endTime}}</text>
+        <text class="coupon-stock">剩余 {{item.remainingCount}} / {{item.totalCount}}</text>
+      </view>
+      <view class="coupon-btn">
+        <button wx:if="{{!item.grabbed}}" class="grab-btn" data-id="{{item.id}}" bindtap="grabCoupon">抢券</button>
+        <view wx:else class="grabbed-tag">已领取</view>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{loaded && couponList.length === 0}}" class="empty">
+    <text>暂无可领取的优惠券</text>
+  </view>
+
+  <!-- 我的优惠券 -->
+  <view class="section-title" wx:if="{{myCoupons.length > 0}}">
+    <text>我的优惠券</text>
+  </view>
+  <view wx:if="{{myCoupons.length > 0}}" class="my-coupon-list">
+    <view wx:for="{{myCoupons}}" wx:key="id" class="my-coupon-card {{item.status === 1 ? 'used' : ''}}">
+      <view class="my-coupon-info">
+        <text class="my-coupon-id">券ID: {{item.couponId}}</text>
+        <text class="my-coupon-time">领取时间: {{item.grabTime}}</text>
+      </view>
+      <view class="my-coupon-status">
+        <text wx:if="{{item.status === 0}}" class="status-unused">未使用</text>
+        <text wx:else class="status-used">已使用</text>
+      </view>
+    </view>
+  </view>
+</view>

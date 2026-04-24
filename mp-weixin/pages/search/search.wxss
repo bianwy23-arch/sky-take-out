@@ -1,0 +1,81 @@
+.container {
+  padding: 20rpx;
+  background: #f8f8f8;
+  min-height: 100vh;
+}
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border-radius: 40rpx;
+  padding: 16rpx 24rpx;
+  margin-bottom: 20rpx;
+}
+
+.search-input {
+  flex: 1;
+  font-size: 28rpx;
+  color: #333;
+}
+
+.search-btn {
+  margin-left: 20rpx;
+  background: #E95F3C;
+  color: #fff;
+  font-size: 26rpx;
+  padding: 10rpx 28rpx;
+  border-radius: 30rpx;
+}
+
+.loading, .empty {
+  text-align: center;
+  color: #999;
+  font-size: 28rpx;
+  margin-top: 80rpx;
+}
+
+.dish-list {
+  height: calc(100vh - 140rpx);
+}
+
+.dish-item {
+  display: flex;
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 20rpx;
+  margin-bottom: 16rpx;
+}
+
+.dish-img {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 12rpx;
+  flex-shrink: 0;
+}
+
+.dish-info {
+  flex: 1;
+  padding-left: 20rpx;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.dish-name {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.dish-desc {
+  font-size: 24rpx;
+  color: #999;
+  margin-top: 10rpx;
+}
+
+.dish-price {
+  font-size: 28rpx;
+  color: #E95F3C;
+  margin-top: 10rpx;
+}

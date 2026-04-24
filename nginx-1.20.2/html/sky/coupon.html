@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>优惠券管理</title>
+  <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+  <style>
+    body { margin: 0; padding: 20px 40px; background: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .header h2 { margin: 0; color: #333; }
+    .card { background: #fff; border-radius: 8px; padding: 24px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 20px; }
+    .login-box { max-width: 400px; margin: 100px auto; }
+    .status-on { color: #67c23a; font-weight: bold; }
+    .status-off { color: #f56c6c; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- 未登录：显示登录 -->
+    <div v-if="!token" class="login-box card">
+      <h2 style="text-align:center;margin-bottom:20px;">管理员登录</h2>
+      <el-form :model="loginForm" label-width="80px">
+        <el-form-item label="用户名">
+          <el-input v-model="loginForm.username" placeholder="admin"></el-input>
+        </el-form-item>
+        <el-form-item label="密码">
+          <el-input v-model="loginForm.password" type="password" placeholder="123456"></el-input>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="login" style="width:100%">登录</el-button>
+        </el-form-item>
+      </el-form>
+    </div>
+
+    <!-- 已登录：优惠券管理 -->
+    <div v-else>
+      <div class="header">
+        <h2>优惠券管理</h2>
+        <div>
+          <el-button type="primary" @click="showCreate = true">创建优惠券</el-button>
+          <el-button @click="loadList">刷新</el-button>
+        </div>
+      </div>
+
+      <!-- 优惠券列表 -->
+      <div class="card">
+        <el-table :data="coupons" border stripe>
+          <el-table-column prop="id" label="ID" width="80"></el-table-column>
+          <el-table-column prop="name" label="券名称" width="160"></el-table-column>
+          <el-table-column label="类型" width="80">
+            <template slot-scope="scope">{{ scope.row.type === 1 ? '满减' : '折扣' }}</template>
+          </el-table-column>
+          <el-table-column prop="threshold" label="门槛(元)" width="100"></el-table-column>
+          <el-table-column prop="discount" label="优惠(元)" width="100"></el-table-column>
+          <el-table-column prop="totalCount" label="总量" width="80"></el-table-column>
+          <el-table-column prop="remainingCount" label="剩余" width="80"></el-table-column>
+          <el-table-column label="状态" width="80">
+            <template slot-scope="scope">
+              <span :class="scope.row.status === 1 ? 'status-on' : 'status-off'">
+                {{ scope.row.status === 1 ? '进行中' : '已结束' }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="startTime" label="开始时间" width="160"></el-table-column>
+          <el-table-column prop="endTime" label="结束时间" width="160"></el-table-column>
+          <el-table-column label="操作" width="120">
+            <template slot-scope="scope">
+              <el-button v-if="scope.row.status === 1" type="danger" size="mini" @click="endCoupon(scope.row.id)">结束活动</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+
+      <!-- 创建优惠券弹窗 -->
+      <el-dialog title="创建优惠券" :visible.sync="showCreate" width="500px">
+        <el-form :model="form" label-width="100px">
+          <el-form-item label="券名称">
+            <el-input v-model="form.name" placeholder="如：满30减5"></el-input>
+          </el-form-item>
+          <el-form-item label="类型">
+            <el-radio-group v-model="form.type">
+              <el-radio :label="1">满减</el-radio>
+              <el-radio :label="2">折扣</el-radio>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item label="使用门槛(元)">
+            <el-input-number v-model="form.threshold" :min="0" :precision="2"></el-input-number>
+          </el-form-item>
+          <el-form-item label="优惠金额(元)">
+            <el-input-number v-model="form.discount" :min="0.01" :precision="2"></el-input-number>
+          </el-form-item>
+          <el-form-item label="发放总量">
+            <el-input-number v-model="form.totalCount" :min="1"></el-input-number>
+          </el-form-item>
+          <el-form-item label="活动时间">
+            <el-date-picker v-model="form.timeRange" type="datetimerange"
+              range-separator="至" start-placeholder="开始时间" end-placeholder="结束时间"
+              value-format="yyyy-MM-dd HH:mm:ss">
+            </el-date-picker>
+          </el-form-item>
+        </el-form>
+        <span slot="footer">
+          <el-button @click="showCreate = false">取消</el-button>
+          <el-button type="primary" @click="createCoupon">确定创建</el-button>
+        </span>
+      </el-dialog>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/vue@2/dist/vue.min.js"></script>
+  <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+  <script>
+    const BASE = '/api';
+
+    new Vue({
+      el: '#app',
+      data() {
+        return {
+          token: localStorage.getItem('coupon_admin_token') || '',
+          loginForm: { username: 'admin', password: '123456' },
+          coupons: [],
+          showCreate: false,
+          form: {
+            name: '', type: 1, threshold: 30, discount: 5, totalCount: 100, timeRange: []
+          }
+        }
+      },
+      mounted() {
+        if (this.token) this.loadList();
+      },
+      methods: {
+        async login() {
+          try {
+            const res = await axios.post(BASE + '/employee/login', this.loginForm);
+            if (res.data.code === 1) {
+              this.token = res.data.data.token;
+              localStorage.setItem('coupon_admin_token', this.token);
+              this.loadList();
+              this.$message.success('登录成功');
+            } else {
+              this.$message.error(res.data.msg || '登录失败');
+            }
+          } catch (e) {
+            this.$message.error('请求失败');
+          }
+        },
+        async loadList() {
+          try {
+            const res = await axios.get(BASE + '/coupon/list', { headers: { token: this.token } });
+            if (res.data.code === 1) {
+              this.coupons = res.data.data || [];
+            } else {
+              this.$message.error(res.data.msg);
+            }
+          } catch (e) {
+            this.$message.error('请求失败');
+          }
+        },
+        async createCoupon() {
+          if (!this.form.name) return this.$message.warning('请输入券名称');
+          if (!this.form.timeRange || this.form.timeRange.length < 2) return this.$message.warning('请选择活动时间');
+
+          const data = {
+            name: this.form.name,
+            type: this.form.type,
+            threshold: this.form.threshold,
+            discount: this.form.discount,
+            totalCount: this.form.totalCount,
+            startTime: this.form.timeRange[0],
+            endTime: this.form.timeRange[1]
+          };
+
+          try {
+            const res = await axios.post(BASE + '/coupon', data, { headers: { token: this.token, 'Content-Type': 'application/json' } });
+            if (res.data.code === 1) {
+              this.$message.success('创建成功');
+              this.showCreate = false;
+              this.form = { name: '', type: 1, threshold: 30, discount: 5, totalCount: 100, timeRange: [] };
+              this.loadList();
+            } else {
+              this.$message.error(res.data.msg || '创建失败');
+            }
+          } catch (e) {
+            this.$message.error('请求失败');
+          }
+        },
+        async endCoupon(id) {
+          try {
+            await this.$confirm('确定结束该优惠券活动？', '提示', { type: 'warning' });
+            const res = await axios.put(BASE + '/coupon/' + id + '/end', null, { headers: { token: this.token } });
+            if (res.data.code === 1) {
+              this.$message.success('已结束');
+              this.loadList();
+            } else {
+              this.$message.error(res.data.msg);
+            }
+          } catch (e) {
+            if (e !== 'cancel') this.$message.error('请求失败');
+          }
+        }
+      }
+    });
+  </script>
+</body>
+</html>

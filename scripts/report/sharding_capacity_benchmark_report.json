@@ -1,0 +1,54 @@
+{
+  "generated_at": "2026-04-15T20:06:35",
+  "metadata_file": "/Users/bianwenyuan/Desktop/sky-take-out_v2/scripts/report/sharding_capacity_seed_metadata.json",
+  "sample_order": {
+    "user_id": 200000,
+    "status": 5,
+    "order_id": 186625474500000,
+    "order_number": "202510172005452000000000",
+    "db_name": "sky_order_0",
+    "orders_table": "orders_0"
+  },
+  "results": [
+    {
+      "case": "routed_order_lookup",
+      "avg_ms": 16.735,
+      "min_ms": 16.081,
+      "max_ms": 17.6,
+      "p95_ms": 17.598,
+      "p99_ms": 17.598,
+      "iterations": 20,
+      "query": "SELECT SQL_NO_CACHE id FROM sky_order_0.orders_0 WHERE number = '202510172005452000000000' AND user_id = 200000;"
+    },
+    {
+      "case": "broadcast_order_lookup",
+      "avg_ms": 17.652,
+      "min_ms": 16.707,
+      "max_ms": 19.71,
+      "p95_ms": 18.991,
+      "p99_ms": 18.991,
+      "iterations": 20,
+      "query": "SELECT SQL_NO_CACHE * FROM (SELECT id, number, status, user_id, order_time FROM sky_order_0.orders_0 WHERE number = '202510172005452000000000' UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_0.orders_1 WHERE number = '202510172005452000000000' UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_0.orders_2 WHERE number = '202510172005452000000000' UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_0.orders_3 WHERE number = '202510172005452000000000' UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_0.orders_4 WHERE number = '202510172005452000000000' UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_0.orders_5 WHERE number = '202510172005452000000000' UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_0.orders_6 WHERE number = '202510172005452000000000' UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_0.orders_7 WHERE number = '202510172005452000000000' UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_1.orders_0 WHERE number = '202510172005452000000000' UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_1.orders_1 WHERE number = '202510172005452000000000' UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_1.orders_2 WHERE number = '202510172005452000000000' UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_1.orders_3 WHERE number = '202510172005452000000000' UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_1.orders_4 WHERE number = '202510172005452000000000' UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_1.orders_5 WHERE number = '202510172005452000000000' UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_1.orders_6 WHERE number = '202510172005452000000000' UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_1.orders_7 WHERE number = '202510172005452000000000') t LIMIT 1;"
+    },
+    {
+      "case": "routed_user_order_list",
+      "avg_ms": 17.04,
+      "min_ms": 16.155,
+      "max_ms": 18.594,
+      "p95_ms": 17.862,
+      "p99_ms": 17.862,
+      "iterations": 20,
+      "query": "SELECT SQL_NO_CACHE id, number, status, order_time FROM sky_order_0.orders_0 WHERE user_id = 200000 AND status = 5 ORDER BY order_time DESC LIMIT 20;"
+    },
+    {
+      "case": "broadcast_status_query",
+      "avg_ms": 88.832,
+      "min_ms": 79.484,
+      "max_ms": 100.046,
+      "p95_ms": 99.616,
+      "p99_ms": 99.616,
+      "iterations": 20,
+      "query": "SELECT SQL_NO_CACHE * FROM (SELECT id, number, status, user_id, order_time FROM sky_order_0.orders_0 WHERE status = 5 UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_0.orders_1 WHERE status = 5 UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_0.orders_2 WHERE status = 5 UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_0.orders_3 WHERE status = 5 UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_0.orders_4 WHERE status = 5 UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_0.orders_5 WHERE status = 5 UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_0.orders_6 WHERE status = 5 UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_0.orders_7 WHERE status = 5 UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_1.orders_0 WHERE status = 5 UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_1.orders_1 WHERE status = 5 UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_1.orders_2 WHERE status = 5 UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_1.orders_3 WHERE status = 5 UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_1.orders_4 WHERE status = 5 UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_1.orders_5 WHERE status = 5 UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_1.orders_6 WHERE status = 5 UNION ALL SELECT id, number, status, user_id, order_time FROM sky_order_1.orders_7 WHERE status = 5) t ORDER BY order_time DESC LIMIT 20;"
+    }
+  ]
+}

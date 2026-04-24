@@ -1,0 +1,21 @@
+<view class="container">
+  <view class="search-bar">
+    <input class="search-input" placeholder="搜索菜品名称或描述" value="{{keyword}}" bindinput="onInput" bindconfirm="onSearch" confirm-type="search" />
+    <view class="search-btn" bindtap="onSearch">搜索</view>
+  </view>
+
+  <view wx:if="{{loading}}" class="loading">搜索中...</view>
+
+  <view wx:elif="{{searched && dishList.length === 0}}" class="empty">未找到相关菜品</view>
+
+  <scroll-view wx:elif="{{dishList.length > 0}}" scroll-y class="dish-list">
+    <view wx:for="{{dishList}}" wx:key="id" class="dish-item">
+      <image class="dish-img" src="{{item.image}}" mode="aspectFill"></image>
+      <view class="dish-info">
+        <view class="dish-name">{{item.name}}</view>
+        <view class="dish-desc">{{item.description}}</view>
+        <view class="dish-price">￥{{item.price}}</view>
+      </view>
+    </view>
+  </scroll-view>
+</view>

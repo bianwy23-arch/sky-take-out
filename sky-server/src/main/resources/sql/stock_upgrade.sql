@@ -1,0 +1,5 @@
+ALTER TABLE dish
+    ADD COLUMN stock_available INT NOT NULL DEFAULT 0 COMMENT '可用库存',
+    ADD COLUMN stock_locked INT NOT NULL DEFAULT 0 COMMENT '锁定库存',
+    ADD COLUMN version INT NOT NULL DEFAULT 0 COMMENT '乐观锁版本';
+
