@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sky.mapper.PaidCouponUnitMapper">
+
+    <select id="lockAvailableUnits" resultType="com.sky.entity.PaidCouponUnit">
+        <choose>
+            <when test="items.size == 1">
+                SELECT coupon_id AS couponId, unit_id AS unitId
+                FROM paid_coupon_available_unit
+                WHERE coupon_id = #{items[0].couponId}
+                ORDER BY unit_id
+                LIMIT #{items[0].quantity}
+                FOR UPDATE SKIP LOCKED
+            </when>
+            <otherwise>
+                <foreach collection="items" item="item" separator=" UNION ALL ">
+                    (SELECT coupon_id AS couponId, unit_id AS unitId
+                     FROM paid_coupon_available_unit
+                     WHERE coupon_id = #{item.couponId}
+                     ORDER BY unit_id
+                     LIMIT #{item.quantity}
+                     FOR UPDATE SKIP LOCKED)
+                </foreach>
+            </otherwise>
+        </choose>
+    </select>
+
+    <delete id="deleteAvailableUnits">
+        DELETE FROM paid_coupon_available_unit
+        WHERE (coupon_id, unit_id) IN
+        <foreach collection="units" item="unit" open="(" separator="," close=")">
+            (#{unit.couponId}, #{unit.unitId})
+        </foreach>
+    </delete>
+
+    <insert id="insertAvailableUnits">
+        INSERT INTO paid_coupon_available_unit(coupon_id, unit_id)
+        VALUES
+        <foreach collection="units" item="unit" separator=",">
+            (#{unit.couponId}, #{unit.unitId})
+        </foreach>
+    </insert>
+
+    <insert id="insertReservedUnits">
+        INSERT INTO paid_coupon_reserved_unit(request_id, coupon_id, unit_id)
+        VALUES
+        <foreach collection="units" item="unit" separator=",">
+            (#{requestId}, #{unit.couponId}, #{unit.unitId})
+        </foreach>
+    </insert>
+
+    <delete id="deleteReservedByRequest">
+        DELETE FROM paid_coupon_reserved_unit
+        WHERE request_id = #{requestId}
+    </delete>
+
+    <select id="countReservedByRequest" resultType="com.sky.dto.PaidCouponItemDTO">
+        SELECT coupon_id AS couponId, CAST(COUNT(*) AS SIGNED) AS quantity
+        FROM paid_coupon_reserved_unit
+        WHERE request_id = #{requestId}
+        GROUP BY coupon_id
+        ORDER BY coupon_id
+    </select>
+</mapper>
