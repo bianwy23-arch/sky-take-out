@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sky.mapper.PaidCouponReservationMapper">
+
+    <sql id="batchColumns">
+        request_id AS requestId,
+        user_id AS userId,
+        items,
+        state,
+        expires_at AS expiresAt,
+        CASE WHEN expires_at &lt;= NOW() THEN 1 ELSE 0 END AS due
+    </sql>
+
+    <select id="lockByRequestId" resultType="com.sky.entity.PaidCouponReservationBatch">
+        SELECT <include refid="batchColumns"/>
+        FROM paid_coupon_reservation_batch
+        WHERE request_id = #{requestId}
+        FOR UPDATE
+    </select>
+
+    <select id="findByRequestId" resultType="com.sky.entity.PaidCouponReservationBatch">
+        SELECT <include refid="batchColumns"/>
+        FROM paid_coupon_reservation_batch
+        WHERE request_id = #{requestId}
+    </select>
+
+    <insert id="insertReserved">
+        INSERT INTO paid_coupon_reservation_batch(request_id, user_id, items, state, expires_at)
+        VALUES (#{requestId}, #{userId}, #{items}, 'RESERVED', #{expiresAt})
+    </insert>
+
+    <update id="markClaimed">
+        UPDATE paid_coupon_reservation_batch
+        SET state = 'CLAIMED'
+        WHERE request_id = #{requestId}
+          AND state = 'RESERVED'
+    </update>
+
+    <update id="markReleased">
+        UPDATE paid_coupon_reservation_batch
+        SET state = 'RELEASED'
+        WHERE request_id = #{requestId}
+          AND state = 'RESERVED'
+    </update>
+
+    <select id="selectExpired" resultType="com.sky.entity.PaidCouponReservationBatch">
+        SELECT <include refid="batchColumns"/>
+        FROM paid_coupon_reservation_batch
+        WHERE state = 'RESERVED'
+          AND expires_at &lt;= NOW()
+        <if test="cursorRequestId != null">
+            AND (expires_at &gt; #{cursorExpiresAt}
+              OR (expires_at = #{cursorExpiresAt} AND request_id &gt; #{cursorRequestId}))
+        </if>
+        ORDER BY expires_at, request_id
+        LIMIT #{limit}
+    </select>
+
+    <select id="transactionIsolation" resultType="java.lang.String">
+        SELECT @@transaction_isolation
+    </select>
+
+    <select id="databaseNow" resultType="java.time.LocalDateTime">
+        SELECT NOW()
+    </select>
+</mapper>

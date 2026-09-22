@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sky.mapper.PaidCouponInventoryMapper">
+
+    <insert id="insert">
+        INSERT INTO paid_coupon_inventory(coupon_id, total, remaining, next_unit_id)
+        VALUES (#{couponId}, #{total}, #{remaining}, #{nextUnitId})
+    </insert>
+
+    <select id="snapshot" resultType="com.sky.dto.PaidCouponPoolSnapshot">
+        SELECT i.coupon_id AS couponId,
+               i.remaining AS remaining,
+               CAST((SELECT COUNT(*) FROM paid_coupon_available_unit a WHERE a.coupon_id = i.coupon_id) AS SIGNED) AS availableCount,
+               CAST((SELECT COUNT(*) FROM paid_coupon_reserved_unit r WHERE r.coupon_id = i.coupon_id) AS SIGNED) AS reservedCount
+        FROM paid_coupon_inventory i
+        WHERE i.coupon_id = #{couponId}
+    </select>
+
+    <select id="lockByCouponIds" resultType="com.sky.entity.PaidCouponInventory">
+        SELECT coupon_id AS couponId, total, remaining, next_unit_id AS nextUnitId
+        FROM paid_coupon_inventory
+        WHERE coupon_id IN
+        <foreach collection="couponIds" item="couponId" open="(" separator="," close=")">
+            #{couponId}
+        </foreach>
+        ORDER BY coupon_id
+        FOR UPDATE
+    </select>
+
+    <update id="decrementRemaining">
+        UPDATE paid_coupon_inventory
+        SET remaining = remaining - #{quantity}
+        WHERE coupon_id = #{couponId}
+          AND remaining >= #{quantity}
+    </update>
+
+    <update id="advanceNextUnitId">
+        UPDATE paid_coupon_inventory
+        SET next_unit_id = #{nextUnitId}
+        WHERE coupon_id = #{couponId}
+    </update>
+</mapper>
