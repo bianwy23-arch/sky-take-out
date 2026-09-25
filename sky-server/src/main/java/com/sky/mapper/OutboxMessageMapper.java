@@ -22,7 +22,18 @@ public interface OutboxMessageMapper {
     @Select("select * from outbox_message where status = 0 and next_retry_time <= now() order by id asc limit #{limit}")
     List<OutboxMessage> listReady(@Param("limit") int limit);
 
-    @Update("update outbox_message set status = 1, update_time = #{updateTime}, last_error = null where id = #{id} and user_id = #{userId}")
+    @Update("update outbox_message set status = #{status}, update_time = #{updateTime}, last_error = null where id = #{id} and user_id = #{userId}")
+    int updateStatus(@Param("id") Long id,
+                     @Param("userId") Long userId,
+                     @Param("status") Integer status,
+                     @Param("updateTime") LocalDateTime updateTime);
+
+    @Update("update outbox_message set status = 1, update_time = #{updateTime}, last_error = null " +
+            "where id = #{id} and user_id = #{userId} and status = 0")
+    int markSending(@Param("id") Long id, @Param("userId") Long userId, @Param("updateTime") LocalDateTime updateTime);
+
+    @Update("update outbox_message set status = 2, update_time = #{updateTime}, last_error = null " +
+            "where id = #{id} and user_id = #{userId} and status = 1")
     int markSent(@Param("id") Long id, @Param("userId") Long userId, @Param("updateTime") LocalDateTime updateTime);
 
     @Update("update outbox_message set status = #{status}, retry_count = #{retryCount}, next_retry_time = #{nextRetryTime}, " +
@@ -35,4 +46,3 @@ public interface OutboxMessageMapper {
                   @Param("lastError") String lastError,
                   @Param("updateTime") LocalDateTime updateTime);
 }
-

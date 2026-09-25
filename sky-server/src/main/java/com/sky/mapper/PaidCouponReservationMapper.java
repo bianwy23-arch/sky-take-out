@@ -12,6 +12,8 @@ public interface PaidCouponReservationMapper {
 
     PaidCouponReservationBatch lockByRequestId(@Param("requestId") String requestId);
 
+    List<PaidCouponReservationBatch> lockByRequestIds(@Param("requestIds") List<String> requestIds);
+
     PaidCouponReservationBatch findByRequestId(@Param("requestId") String requestId);
 
     int insertReserved(@Param("requestId") String requestId,
@@ -19,7 +21,13 @@ public interface PaidCouponReservationMapper {
                        @Param("items") String items,
                        @Param("expiresAt") java.time.LocalDateTime expiresAt);
 
+    int insertReservedBatch(@Param("batches") List<PaidCouponReservationBatch> batches);
+
+    List<String> findExistingRequestIds(@Param("requestIds") List<String> requestIds);
+
     int markClaimed(@Param("requestId") String requestId);
+
+    int markClaimedBatch(@Param("requestIds") List<String> requestIds);
 
     int markReleased(@Param("requestId") String requestId);
 

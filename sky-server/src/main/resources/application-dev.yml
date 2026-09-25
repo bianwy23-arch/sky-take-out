@@ -35,10 +35,37 @@ sky:
     exchange: sky.order.event.exchange
     queue: sky.order.event.queue
     logistics-queue: sky.logistics.event.queue
+    coupon-queue: sky.coupon.grab.queue
+    coupon-dlx-exchange: sky.coupon.grab.dlx
+    coupon-dlq-queue: sky.coupon.grab.dlq
     routing-key-created: order.created
     routing-key-paid: order.paid
     routing-key-cancelled: order.cancelled
     routing-key-logistics-status: logistics.status
+    routing-key-coupon-grab: coupon.grab
+    routing-key-coupon-dead: coupon.grab.dead
+    coupon-consumer:
+      concurrent-consumers: 8
+      max-concurrent-consumers: 32
+      prefetch-count: 50
+    outbox-dispatch:
+      fixed-delay-millis: 200
+      batch-size: 500
+      worker-count: 4
+
+  id:
+    worker-id: 1
+
+  paid-coupon:
+    pool-capacity: 1000
+    reservation-ttl-seconds: 600
+    # Local baseline, 2026-09-22, MySQL 9.6, 2 coupons x quantity 1:
+    # uncontended reserve 2.29ms, claim 1.69ms. 1500ms leaves room for lock retries.
+    reserve-timeout-ms: 1500
+    expire-scan-delay-ms: 10000
+    expire-scan-initial-delay-ms: 10000
+    expire-scan-batch-size: 100
+    demo-enabled: true
 
 # ============================================================
 # ShardingSphere 分库分表配置
@@ -80,10 +107,6 @@ spring:
               standard:
                 sharding-column: user_id
                 sharding-algorithm-name: table-mod
-            key-generate-strategy:
-              column: id
-              key-generator-name: snowflake
-
           order_detail:
             actual-data-nodes: ds_$->{0..1}.order_detail_$->{0..7}
             database-strategy:

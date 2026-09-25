@@ -18,6 +18,17 @@
         FOR UPDATE
     </select>
 
+    <select id="lockByRequestIds" resultType="com.sky.entity.PaidCouponReservationBatch">
+        SELECT <include refid="batchColumns"/>
+        FROM paid_coupon_reservation_batch
+        WHERE request_id IN
+        <foreach collection="requestIds" item="requestId" open="(" separator="," close=")">
+            #{requestId}
+        </foreach>
+        ORDER BY request_id
+        FOR UPDATE
+    </select>
+
     <select id="findByRequestId" resultType="com.sky.entity.PaidCouponReservationBatch">
         SELECT <include refid="batchColumns"/>
         FROM paid_coupon_reservation_batch
@@ -29,10 +40,37 @@
         VALUES (#{requestId}, #{userId}, #{items}, 'RESERVED', #{expiresAt})
     </insert>
 
+    <insert id="insertReservedBatch">
+        INSERT INTO paid_coupon_reservation_batch(request_id, user_id, items, state, expires_at)
+        VALUES
+        <foreach collection="batches" item="batch" separator=",">
+            (#{batch.requestId}, #{batch.userId}, #{batch.items}, 'RESERVED', #{batch.expiresAt})
+        </foreach>
+    </insert>
+
+    <select id="findExistingRequestIds" resultType="java.lang.String">
+        SELECT request_id
+        FROM paid_coupon_reservation_batch
+        WHERE request_id IN
+        <foreach collection="requestIds" item="requestId" open="(" separator="," close=")">
+            #{requestId}
+        </foreach>
+    </select>
+
     <update id="markClaimed">
         UPDATE paid_coupon_reservation_batch
         SET state = 'CLAIMED'
         WHERE request_id = #{requestId}
+          AND state = 'RESERVED'
+    </update>
+
+    <update id="markClaimedBatch">
+        UPDATE paid_coupon_reservation_batch
+        SET state = 'CLAIMED'
+        WHERE request_id IN
+        <foreach collection="requestIds" item="requestId" open="(" separator="," close=")">
+            #{requestId}
+        </foreach>
           AND state = 'RESERVED'
     </update>
 

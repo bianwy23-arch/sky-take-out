@@ -4,7 +4,7 @@
 CREATE TABLE IF NOT EXISTS paid_coupon_inventory (
     coupon_id    BIGINT NOT NULL COMMENT '券ID，同时是库存账本主键',
     total        INT    NOT NULL COMMENT '固定总量',
-    remaining    INT    NOT NULL COMMENT '尚未正式售出的数量 L',
+    remaining    INT    NOT NULL COMMENT '尚未正式售出的数量 L，Claim 扣减',
     next_unit_id BIGINT NOT NULL COMMENT '下一个待分配单位编号，只增不复用',
     PRIMARY KEY (coupon_id),
     CONSTRAINT chk_inventory_remaining CHECK (remaining >= 0 AND remaining <= total),

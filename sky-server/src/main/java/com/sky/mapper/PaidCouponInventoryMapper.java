@@ -16,7 +16,7 @@ public interface PaidCouponInventoryMapper {
 
     List<PaidCouponInventory> lockByCouponIds(@Param("couponIds") List<Long> couponIds);
 
-    int decrementRemaining(@Param("couponId") Long couponId, @Param("quantity") int quantity);
+    int decrementBatch(@Param("items") List<com.sky.dto.PaidCouponItemDTO> items);
 
     int advanceNextUnitId(@Param("couponId") Long couponId, @Param("nextUnitId") long nextUnitId);
 }

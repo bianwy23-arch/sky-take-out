@@ -13,6 +13,7 @@ import com.sky.exception.ShoppingCartBusinessException;
 import com.sky.mapper.*;
 import com.sky.result.PageResult;
 import com.sky.service.OrderService;
+import com.sky.utils.OrderIdGenerator;
 import com.sky.utils.OrderNumberGenerator;
 import com.sky.utils.WeChatPayUtil;
 import com.sky.vo.OrderPaymentVO;
@@ -41,7 +42,10 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 
@@ -49,6 +53,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class OrderServiceImpl implements OrderService {
     private static final int MAX_OPTIMISTIC_RETRY = 3;
+    private static final long ADMIN_DB_FALLBACK_MINUTES = 70L;
 
     /** Redis key: ZSET，score = 下单时间戳(ms)，member = "{orderId}:{userId}" */
     private static final String PENDING_ORDER_ZSET = "order:pending";
@@ -76,6 +81,9 @@ public class OrderServiceImpl implements OrderService {
 
     @Autowired
     private OutboxMessageMapper outboxMessageMapper;
+
+    @Autowired
+    private OrderIdGenerator orderIdGenerator;
 
     @Autowired
     private RedisTemplate<String, String> redisTemplate;
@@ -113,6 +121,7 @@ public class OrderServiceImpl implements OrderService {
         // 构建订单
         Orders orders = new Orders();
         BeanUtils.copyProperties(ordersSubmitDTO, orders);
+        orders.setId(orderIdGenerator.nextId());
         orders.setUserId(currentId);
         orders.setOrderTime(LocalDateTime.now());
         orders.setPayStatus(Orders.UN_PAID);
@@ -123,10 +132,6 @@ public class OrderServiceImpl implements OrderService {
         orders.setConsignee(addressBook.getConsignee());
         orders.setAddress(addressBook.getDetail());
         orderMapper.insert(orders);
-        // ShardingSphere Snowflake id 不会回写到实体，手动回查
-        if (orders.getId() == null) {
-            orders.setId(orderMapper.getIdByNumberAndUserId(orders.getNumber(), currentId));
-        }
 
         // 构建订单明细，必须设置 userId（分片键，保证与 orders 路由到同一分片）
         List<OrderDetail> orderDetailList = new ArrayList<>();
@@ -359,6 +364,25 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     public PageResult conditionSearch(OrdersPageQueryDTO ordersPageQueryDTO) {
+        List<OrderVO> recentDbOrders = queryRecentAdminOrdersFromDb(ordersPageQueryDTO);
+        List<OrderVO> esOrders = queryAdminOrdersFromEs(ordersPageQueryDTO);
+        Map<Long, OrderVO> merged = new LinkedHashMap<>();
+        recentDbOrders.forEach(order -> merged.put(order.getId(), order));
+        esOrders.forEach(order -> merged.putIfAbsent(order.getId(), order));
+
+        List<OrderVO> mergedList = merged.values().stream()
+                .sorted(Comparator.comparing(OrderVO::getOrderTime,
+                        Comparator.nullsLast(Comparator.reverseOrder())))
+                .collect(Collectors.toList());
+
+        int page = Math.max(ordersPageQueryDTO.getPage(), 1);
+        int pageSize = Math.max(ordersPageQueryDTO.getPageSize(), 1);
+        int fromIndex = Math.min((page - 1) * pageSize, mergedList.size());
+        int toIndex = Math.min(fromIndex + pageSize, mergedList.size());
+        return new PageResult(mergedList.size(), mergedList.subList(fromIndex, toIndex));
+    }
+
+    private List<OrderVO> queryAdminOrdersFromEs(OrdersPageQueryDTO ordersPageQueryDTO) {
         BoolQueryBuilder boolQuery = QueryBuilders.boolQuery();
 
         if (ordersPageQueryDTO.getNumber() != null && !ordersPageQueryDTO.getNumber().isEmpty()) {
@@ -394,17 +418,28 @@ public class OrderServiceImpl implements OrderService {
                 esOperations.indexOps(OrderDocument.class);
         if (!indexOps.exists()) {
             indexOps.createWithMapping();
-            return new PageResult(0, new ArrayList<>());
+            return new ArrayList<>();
         }
 
         SearchHits<OrderDocument> hits = esOperations.search(query, OrderDocument.class);
-        long total = hits.getTotalHits();
-
-        List<OrderVO> orderVOList = hits.getSearchHits().stream()
+        return hits.getSearchHits().stream()
                 .map(hit -> docToOrderVO(hit.getContent()))
                 .collect(Collectors.toList());
+    }
 
-        return new PageResult(total, orderVOList);
+    private List<OrderVO> queryRecentAdminOrdersFromDb(OrdersPageQueryDTO source) {
+        OrdersPageQueryDTO dbQuery = new OrdersPageQueryDTO();
+        BeanUtils.copyProperties(source, dbQuery);
+        LocalDateTime fallbackBeginTime = LocalDateTime.now().minusMinutes(ADMIN_DB_FALLBACK_MINUTES);
+        if (dbQuery.getBeginTime() == null || dbQuery.getBeginTime().isBefore(fallbackBeginTime)) {
+            dbQuery.setBeginTime(fallbackBeginTime);
+        }
+        if (dbQuery.getEndTime() != null && dbQuery.getEndTime().isBefore(fallbackBeginTime)) {
+            return new ArrayList<>();
+        }
+        PageHelper.startPage(1, Math.max(source.getPage() * source.getPageSize(), source.getPageSize()));
+        Page<Orders> page = orderMapper.pageQuery(dbQuery);
+        return getOrderVOList(page);
     }
 
     private OrderVO docToOrderVO(OrderDocument doc) {

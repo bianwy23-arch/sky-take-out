@@ -6,8 +6,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.util.concurrent.TimeUnit;
-
 @Component
 public class OrderEventMqPublisher {
 
@@ -23,13 +21,21 @@ public class OrderEventMqPublisher {
     @Value("${sky.mq.routing-key-cancelled}")
     private String cancelledRoutingKey;
 
+    @Value("${sky.mq.routing-key-coupon-grab}")
+    private String couponGrabRoutingKey;
+
     @Autowired
     private RabbitTemplate rabbitTemplate;
 
-    public void publish(OutboxMessage message) {
+    @Autowired
+    private OutboxPublishTracker outboxPublishTracker;
+
+    public String publish(OutboxMessage message) {
         String routingKey = toRoutingKey(message.getEventType());
+        String correlationId = "outbox-" + message.getId();
         org.springframework.amqp.rabbit.connection.CorrelationData correlationData =
-                new org.springframework.amqp.rabbit.connection.CorrelationData("outbox-" + message.getId());
+                new org.springframework.amqp.rabbit.connection.CorrelationData(correlationId);
+        outboxPublishTracker.register(correlationId, message.getId(), message.getUserId());
 
         rabbitTemplate.convertAndSend(exchangeName, routingKey, message.getPayload(), msg -> {
             msg.getMessageProperties().setHeader("eventId", String.valueOf(message.getId()));
@@ -37,17 +43,7 @@ public class OrderEventMqPublisher {
             msg.getMessageProperties().setHeader("eventType", message.getEventType());
             return msg;
         }, correlationData);
-
-        try {
-            org.springframework.amqp.rabbit.connection.CorrelationData.Confirm confirm =
-                    correlationData.getFuture().get(3, TimeUnit.SECONDS);
-            if (confirm == null || !confirm.isAck()) {
-                String reason = confirm == null ? "confirm timeout" : confirm.getReason();
-                throw new IllegalStateException("mq publish not ack, outboxId=" + message.getId() + ", reason=" + reason);
-            }
-        } catch (Exception ex) {
-            throw new RuntimeException("mq publish failed, outboxId=" + message.getId(), ex);
-        }
+        return correlationId;
     }
 
     private String toRoutingKey(String eventType) {
@@ -59,6 +55,9 @@ public class OrderEventMqPublisher {
         }
         if ("ORDER_CANCELLED".equals(eventType)) {
             return cancelledRoutingKey;
+        }
+        if ("COUPON_GRAB".equals(eventType)) {
+            return couponGrabRoutingKey;
         }
         throw new IllegalArgumentException("unsupported eventType: " + eventType);
     }

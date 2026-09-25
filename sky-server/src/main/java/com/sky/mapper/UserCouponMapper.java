@@ -3,8 +3,10 @@ package com.sky.mapper;
 import com.sky.entity.UserCoupon;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
+import java.util.Collection;
 import java.util.List;
 
 @Mapper
@@ -18,4 +20,10 @@ public interface UserCouponMapper {
 
     @Select("SELECT COUNT(1) FROM user_coupon WHERE user_id = #{userId} AND coupon_id = #{couponId}")
     int existsByUserIdAndCouponId(Long userId, Long couponId);
+
+    @Select({"<script>",
+            "SELECT user_id FROM user_coupon WHERE coupon_id = #{couponId} AND user_id IN",
+            "<foreach collection='userIds' item='userId' open='(' separator=',' close=')'>#{userId}</foreach>",
+            "</script>"})
+    List<Long> findGrantedUserIds(@Param("couponId") Long couponId, @Param("userIds") Collection<Long> userIds);
 }

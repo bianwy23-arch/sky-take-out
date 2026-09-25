@@ -4,8 +4,8 @@ import com.sky.document.OrderDocument;
 import com.sky.entity.OrderDetail;
 import com.sky.entity.OrderEventConsumeLog;
 import com.sky.entity.Orders;
-import com.sky.mapper.OrderDetailMapper;
 import com.sky.mapper.OrderEventConsumeLogMapper;
+import com.sky.mapper.OrderDetailMapper;
 import com.sky.mapper.OrderMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.Message;
@@ -20,11 +20,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import java.math.BigDecimal;
+import java.util.List;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.List;
 import java.util.stream.Collectors;
 
 @Component
@@ -84,7 +83,6 @@ public class OrderEventMqConsumer {
                 CONSUMER_NAME, queueName, eventId, bizKey, eventType,
                 message.getMessageProperties().getReceivedRoutingKey(), body);
 
-        // 写入 ES：将订单当前状态全量同步
         syncOrderToEs(bizKey, eventType);
     }
 

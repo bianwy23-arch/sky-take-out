@@ -32,8 +32,8 @@ public interface CouponMapper {
     @Update("UPDATE coupon SET remaining_count = remaining_count - 1 WHERE id = #{id} AND remaining_count > 0")
     int decrementStock(Long id);
 
-    @Update("UPDATE coupon SET remaining_count = total_count - " +
-            "(SELECT COUNT(*) FROM user_coupon WHERE coupon_id = #{id}) " +
-            "WHERE id = #{id}")
+    @Update("UPDATE coupon c SET c.remaining_count = GREATEST(0, c.total_count - " +
+            "(SELECT COUNT(*) FROM user_coupon uc WHERE uc.coupon_id = c.id)) " +
+            "WHERE c.id = #{id}")
     void fixRemainingCount(Long id);
 }

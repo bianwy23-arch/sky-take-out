@@ -147,6 +147,35 @@ CREATE TABLE IF NOT EXISTS shopping_cart   LIKE take_out_v2.shopping_cart;
 CREATE TABLE IF NOT EXISTS order_event_consume_log    LIKE take_out_v2.order_event_consume_log;
 CREATE TABLE IF NOT EXISTS logistics_event_consume_log LIKE take_out_v2.logistics_event_consume_log;
 
+-- Redis 回滚失败补偿表：用于幂等重试 coupon_grab_rollback.lua
+CREATE TABLE IF NOT EXISTS coupon_redis_compensation (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    coupon_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    source VARCHAR(64) NOT NULL,
+    status TINYINT NOT NULL DEFAULT 0 COMMENT '0=PENDING 1=SUCCESS 2=FAILED',
+    retry_count INT NOT NULL DEFAULT 0,
+    next_retry_time DATETIME NOT NULL,
+    last_error VARCHAR(500),
+    created_time DATETIME NOT NULL,
+    update_time DATETIME NOT NULL,
+    UNIQUE KEY uk_coupon_user_source (coupon_id, user_id, source),
+    KEY idx_status_retry_time (status, next_retry_time),
+    KEY idx_coupon_user (coupon_id, user_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '优惠券 Redis 回滚补偿表';
+
+-- 应用层订单 ID 号段表：用于 Snowflake 遇到大幅时钟回拨时兜底
+CREATE TABLE IF NOT EXISTS id_segment (
+    biz_type    VARCHAR(64) PRIMARY KEY,
+    max_id      BIGINT      NOT NULL,
+    step        INT         NOT NULL,
+    update_time DATETIME    NOT NULL
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '应用层号段 ID 表';
+
+INSERT INTO id_segment(biz_type, max_id, step, update_time)
+VALUES ('orders', 1000000000000000, 1000, NOW())
+ON DUPLICATE KEY UPDATE biz_type = biz_type;
+
 -- ---------- 迁移初始数据（广播表/单表）从 take_out_v2 到 sky_order_0 ----------
 INSERT INTO dish             SELECT * FROM take_out_v2.dish;
 INSERT INTO category         SELECT * FROM take_out_v2.category;

@@ -15,8 +15,9 @@ import java.time.LocalDateTime;
 public class OutboxMessage implements Serializable {
 
     public static final Integer NEW = 0;
-    public static final Integer SENT = 1;
-    public static final Integer FAILED = 2;
+    public static final Integer SENDING = 1;
+    public static final Integer SENT = 2;
+    public static final Integer FAILED = 3;
 
     private static final long serialVersionUID = 1L;
 
@@ -33,4 +34,3 @@ public class OutboxMessage implements Serializable {
     // 分片键：与 orders.user_id 相同，保证路由到同一分片
     private Long userId;
 }
-

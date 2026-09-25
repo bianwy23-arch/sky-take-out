@@ -42,9 +42,14 @@ logging:
   level:
     com:
       sky:
-        mapper: debug
+        mapper: info
         service: info
         controller: info
+    org:
+      elasticsearch:
+        client:
+          RestClient: error
+    ShardingSphere-SQL: warn
 
 sky:
   jwt:
@@ -81,7 +86,41 @@ sky:
     exchange: ${sky.mq.exchange}
     queue: ${sky.mq.queue}
     logistics-queue: ${sky.mq.logistics-queue}
+    coupon-queue: ${sky.mq.coupon-queue}
+    coupon-dlx-exchange: ${sky.mq.coupon-dlx-exchange}
+    coupon-dlq-queue: ${sky.mq.coupon-dlq-queue}
     routing-key-created: ${sky.mq.routing-key-created}
     routing-key-paid: ${sky.mq.routing-key-paid}
     routing-key-cancelled: ${sky.mq.routing-key-cancelled}
     routing-key-logistics-status: ${sky.mq.routing-key-logistics-status}
+    routing-key-coupon-grab: ${sky.mq.routing-key-coupon-grab}
+    routing-key-coupon-dead: ${sky.mq.routing-key-coupon-dead}
+    coupon-consumer:
+      concurrent-consumers: ${sky.mq.coupon-consumer.concurrent-consumers}
+      max-concurrent-consumers: ${sky.mq.coupon-consumer.max-concurrent-consumers}
+      prefetch-count: ${sky.mq.coupon-consumer.prefetch-count}
+    outbox-dispatch:
+      fixed-delay-millis: ${sky.mq.outbox-dispatch.fixed-delay-millis}
+      batch-size: ${sky.mq.outbox-dispatch.batch-size}
+      worker-count: ${sky.mq.outbox-dispatch.worker-count}
+
+  rate-limit:
+    redis:
+      max-requests: 30
+      window-millis: 60000
+    local:
+      cache-maximum-size: 100000
+      expire-after-access-minutes: 10
+      high:
+        capacity: 5
+        refill-tokens: 5
+        refill-millis: 60000
+      low:
+        capacity: 60
+        refill-tokens: 60
+        refill-millis: 60000
+    degrade:
+      failure-threshold: 5
+      recovery-success-threshold: 3
+      duration-millis: 30000
+      probe-fixed-delay-millis: 5000

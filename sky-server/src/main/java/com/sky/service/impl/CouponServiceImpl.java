@@ -1,24 +1,31 @@
 package com.sky.service.impl;
 
+import com.alibaba.fastjson.JSON;
 import com.sky.dto.CouponCreateDTO;
+import com.sky.dto.CouponGrabMessage;
+import com.sky.entity.OutboxMessage;
 import com.sky.entity.Coupon;
 import com.sky.entity.UserCoupon;
 import com.sky.exception.BaseException;
 import com.sky.mapper.CouponMapper;
+import com.sky.mapper.OutboxMessageMapper;
 import com.sky.mapper.UserCouponMapper;
+import com.sky.service.CouponRedisCompensationService;
 import com.sky.service.CouponService;
 import com.sky.vo.CouponVO;
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.api.RLock;
-import org.redisson.api.RedissonClient;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.core.script.RedisScript;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.scripting.support.ResourceScriptSource;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Service
@@ -27,7 +34,10 @@ public class CouponServiceImpl implements CouponService {
 
     private static final String STOCK_KEY_PREFIX = "coupon:stock:";
     private static final String GRABBED_KEY_PREFIX = "coupon:grabbed:";
-    private static final String LOCK_KEY_PREFIX = "coupon:lock:";
+    private static final int OUTBOX_INSERT_MAX_ATTEMPTS = 3;
+    private static final Long GRAB_SUCCESS = 0L;
+    private static final Long GRAB_STOCK_EMPTY = 1L;
+    private static final Long GRAB_ALREADY_EXISTS = 2L;
 
     @Autowired
     private CouponMapper couponMapper;
@@ -36,10 +46,16 @@ public class CouponServiceImpl implements CouponService {
     private UserCouponMapper userCouponMapper;
 
     @Autowired
+    private OutboxMessageMapper outboxMessageMapper;
+
+    @Autowired
     private StringRedisTemplate stringRedisTemplate;
 
     @Autowired
-    private RedissonClient redissonClient;
+    private CouponRedisCompensationService couponRedisCompensationService;
+
+    private final RedisScript<Long> couponGrabScript = couponGrabScript();
+    private final RedisScript<Long> couponGrabRollbackScript = couponGrabRollbackScript();
 
     @Override
     public void createCoupon(CouponCreateDTO dto) {
@@ -90,7 +106,7 @@ public class CouponServiceImpl implements CouponService {
 
     @Override
     public void grabCoupon(Long couponId, Long userId) {
-        // 1. 无锁快速校验
+        // 1. 活动校验
         Coupon coupon = couponMapper.getById(couponId);
         if (coupon == null) {
             throw new BaseException("优惠券不存在");
@@ -102,51 +118,53 @@ public class CouponServiceImpl implements CouponService {
         if (now.isBefore(coupon.getStartTime()) || now.isAfter(coupon.getEndTime())) {
             throw new BaseException("不在活动时间范围内");
         }
-        String stockStr = stringRedisTemplate.opsForValue().get(STOCK_KEY_PREFIX + couponId);
-        if (stockStr == null || Integer.parseInt(stockStr) <= 0) {
+
+        // 2. Redis Lua 原子完成：判重、判断库存、预扣库存、记录用户
+        Long result = stringRedisTemplate.execute(
+                couponGrabScript,
+                Arrays.asList(STOCK_KEY_PREFIX + couponId, GRABBED_KEY_PREFIX + couponId),
+                String.valueOf(userId)
+        );
+        if (GRAB_ALREADY_EXISTS.equals(result)) {
+            throw new BaseException("您已领取过该优惠券");
+        }
+        if (GRAB_STOCK_EMPTY.equals(result)) {
             throw new BaseException("优惠券已被抢光");
         }
-
-        // 2. Redisson 分布式锁
-        RLock lock = redissonClient.getLock(LOCK_KEY_PREFIX + couponId);
-        boolean locked = false;
-        try {
-            locked = lock.tryLock(3, 5, TimeUnit.SECONDS);
-            if (!locked) {
-                throw new BaseException("系统繁忙，请稍后再试");
-            }
-
-            // 3. 锁内操作
-            // 检查是否已领取
-            Boolean already = stringRedisTemplate.opsForSet().isMember(GRABBED_KEY_PREFIX + couponId, String.valueOf(userId));
-            if (Boolean.TRUE.equals(already)) {
-                throw new BaseException("您已领取过该优惠券");
-            }
-
-            // 扣减库存
-            Long newStock = stringRedisTemplate.opsForValue().decrement(STOCK_KEY_PREFIX + couponId);
-            if (newStock == null || newStock < 0) {
-                // 库存不足，回补
-                stringRedisTemplate.opsForValue().increment(STOCK_KEY_PREFIX + couponId);
-                throw new BaseException("优惠券已被抢光");
-            }
-
-            // 记录已领取
-            stringRedisTemplate.opsForSet().add(GRABBED_KEY_PREFIX + couponId, String.valueOf(userId));
-
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new BaseException("抢券被中断");
-        } finally {
-            if (locked && lock.isHeldByCurrentThread()) {
-                lock.unlock();
-            }
+        if (!GRAB_SUCCESS.equals(result)) {
+            throw new BaseException("抢券失败，请稍后再试");
         }
 
-        // 4. 锁外：DB 持久化（带重试，处理瞬时 DB 抖动）
-        persistGrab(couponId, userId);
+        // 3. 写 outbox，后续由 OutboxDispatchTask 可靠投递 MQ。
+        try {
+            LocalDateTime messageTime = LocalDateTime.now();
+            CouponGrabMessage grabMessage = CouponGrabMessage.builder()
+                    .couponId(couponId)
+                    .userId(userId)
+                    .grabTime(messageTime)
+                    .build();
+            OutboxMessage outboxMessage = OutboxMessage.builder()
+                    .userId(userId)
+                    .bizKey(couponId + ":" + userId)
+                    .eventType("COUPON_GRAB")
+                    .payload(JSON.toJSONString(grabMessage))
+                    .status(OutboxMessage.NEW)
+                    .retryCount(0)
+                    .nextRetryTime(messageTime)
+                    .lastError(null)
+                    .createdTime(messageTime)
+                    .updateTime(messageTime)
+                    .build();
+            insertOutboxWithRetry(outboxMessage, couponId, userId);
+        } catch (org.springframework.dao.DuplicateKeyException e) {
+            log.info("coupon grab outbox duplicate, couponId={}, userId={}", couponId, userId);
+        } catch (Exception e) {
+            rollbackRedisGrab(couponId, userId);
+            log.error("coupon grab outbox insert failed, couponId={}, userId={}", couponId, userId, e);
+            throw new BaseException("系统繁忙，请稍后再试");
+        }
 
-        log.info("用户 {} 成功抢到优惠券 {}", userId, couponId);
+        log.info("用户 {} 抢券请求已受理，优惠券 {}", userId, couponId);
     }
 
     @Override
@@ -154,72 +172,49 @@ public class CouponServiceImpl implements CouponService {
         return userCouponMapper.listByUserId(userId);
     }
 
-    /**
-     * 将领券记录持久化到 DB，失败时指数退避重试最多 3 次。
-     * 耗尽后只打 ERROR 日志，由 CouponReconcileTask 定时补偿。
-     */
-    private void persistGrab(Long couponId, Long userId) {
-        UserCoupon userCoupon = UserCoupon.builder()
-                .userId(userId)
-                .couponId(couponId)
-                .status(0)
-                .grabTime(LocalDateTime.now())
-                .build();
-        // 第一步：insert 领券记录（带重试）
-        boolean inserted = retryInsert(userCoupon, couponId, userId);
-        if (!inserted) {
-            return; // insert 失败，等对账任务补偿
+    private void rollbackRedisGrab(Long couponId, Long userId) {
+        try {
+            Long rolledBack = stringRedisTemplate.execute(
+                    couponGrabRollbackScript,
+                    Arrays.asList(STOCK_KEY_PREFIX + couponId, GRABBED_KEY_PREFIX + couponId),
+                    String.valueOf(userId)
+            );
+            log.info("coupon grab redis rollback, couponId={}, userId={}, rolledBack={}", couponId, userId, rolledBack);
+        } catch (Exception e) {
+            couponRedisCompensationService.record(couponId, userId, "OUTBOX_INSERT_FAILED", e.getMessage());
+            log.error("coupon grab redis rollback failed, compensation recorded, couponId={}, userId={}", couponId, userId, e);
         }
-        // 第二步：扣减 DB 库存（带重试）
-        retryDecrementStock(couponId, userId);
     }
 
-    private boolean retryInsert(UserCoupon userCoupon, Long couponId, Long userId) {
-        Exception lastEx = null;
-        for (int i = 0; i < 3; i++) {
+    private void insertOutboxWithRetry(OutboxMessage outboxMessage, Long couponId, Long userId) {
+        RuntimeException lastException = null;
+        for (int attempt = 1; attempt <= OUTBOX_INSERT_MAX_ATTEMPTS; attempt++) {
             try {
-                if (userCouponMapper.existsByUserIdAndCouponId(userId, couponId) > 0) {
-                    return true; // 上一轮 insert 已成功，跳过
-                }
-                userCouponMapper.insert(userCoupon);
-                return true;
-            } catch (Exception e) {
-                lastEx = e;
-                if (i < 2) {
-                    try {
-                        Thread.sleep(300L * (1 << i));
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
-                }
-            }
-        }
-        log.error("coupon grab insert failed after 3 retries, couponId={}, userId={}, will be reconciled",
-                couponId, userId, lastEx);
-        return false;
-    }
-
-    private void retryDecrementStock(Long couponId, Long userId) {
-        Exception lastEx = null;
-        for (int i = 0; i < 3; i++) {
-            try {
-                couponMapper.decrementStock(couponId);
+                outboxMessageMapper.insert(outboxMessage);
                 return;
-            } catch (Exception e) {
-                lastEx = e;
-                if (i < 2) {
-                    try {
-                        Thread.sleep(300L * (1 << i));
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
-                }
+            } catch (org.springframework.dao.DuplicateKeyException e) {
+                throw e;
+            } catch (RuntimeException e) {
+                lastException = e;
+                log.warn("coupon grab outbox insert retry, couponId={}, userId={}, attempt={}",
+                        couponId, userId, attempt, e);
             }
         }
-        log.error("coupon decrementStock failed after 3 retries, couponId={}, userId={}, will be reconciled",
-                couponId, userId, lastEx);
+        throw lastException == null ? new IllegalStateException("outbox insert failed") : lastException;
+    }
+
+    private RedisScript<Long> couponGrabScript() {
+        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+        script.setScriptSource(new ResourceScriptSource(new ClassPathResource("scripts/coupon_grab.lua")));
+        script.setResultType(Long.class);
+        return script;
+    }
+
+    private RedisScript<Long> couponGrabRollbackScript() {
+        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+        script.setScriptSource(new ResourceScriptSource(new ClassPathResource("scripts/coupon_grab_rollback.lua")));
+        script.setResultType(Long.class);
+        return script;
     }
 
     private CouponVO toVO(Coupon coupon) {

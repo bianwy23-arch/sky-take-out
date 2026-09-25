@@ -11,16 +11,24 @@ import com.sky.mapper.PaidCouponReservationMapper;
 import com.sky.properties.PaidCouponProperties;
 import com.sky.service.PaidCouponReservationService;
 import com.sky.service.PaidCouponReservationTxService;
+import com.sky.config.AsyncTaskExecutorConfiguration;
+import com.sky.service.paidcoupon.PaidCouponBatchers;
 import com.sky.service.paidcoupon.PaidCouponItems;
+import com.sky.service.paidcoupon.PaidCouponLockLab;
+import com.sky.service.paidcoupon.PaidCouponPoolHints;
+import com.sky.service.paidcoupon.PaidCouponReserveKey;
 import com.sky.service.paidcoupon.ReserveIncompleteException;
 import com.sky.vo.PaidCouponReservationVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.Executor;
 import java.util.concurrent.locks.LockSupport;
 
 @Service
@@ -43,6 +51,19 @@ public class PaidCouponReservationServiceImpl implements PaidCouponReservationSe
     @Autowired
     private PaidCouponProperties properties;
 
+    @Autowired
+    private PaidCouponBatchers batchers;
+
+    @Autowired
+    private PaidCouponLockLab lockLab;
+
+    @Autowired
+    private PaidCouponPoolHints poolHints;
+
+    @Autowired
+    @Qualifier(AsyncTaskExecutorConfiguration.ASYNC_TASK_EXECUTOR)
+    private Executor asyncTaskExecutor;
+
     @Override
     public PaidCouponReservationVO reserve(Long userId, PaidCouponReserveDTO dto) {
         if (userId == null || dto == null || blank(dto.getRequestId())) {
@@ -54,13 +75,24 @@ public class PaidCouponReservationServiceImpl implements PaidCouponReservationSe
         List<PaidCouponItemDTO> items = PaidCouponItems.normalize(dto.getItems());
         String canonical = PaidCouponItems.canonical(items);
         long deadline = System.nanoTime() + properties.getReserveTimeoutMs() * 1_000_000L;
+        if (!lockLab.matches(items)) {
+            Optional<PaidCouponReservationVO> batched = batchers.reserve(
+                    new PaidCouponReserveKey(userId, dto.getRequestId(), canonical, items),
+                    properties.getReserveTimeoutMs());
+            if (batched.isPresent()) {
+                refillAhead(items);
+                return batched.get();
+            }
+        }
         while (true) {
             if (System.nanoTime() > deadline) {
                 throw new BaseException("系统繁忙，请稍后再试");
             }
             try {
-                return txService.tryReserve(userId, dto.getRequestId(), canonical, items,
+                PaidCouponReservationVO reserved = txService.tryReserve(userId, dto.getRequestId(), canonical, items,
                         properties.getReservationTtlSeconds());
+                refillAhead(items);
+                return reserved;
             } catch (ReserveIncompleteException ex) {
                 String terminal = recover(items);
                 if (terminal != null) {
@@ -75,7 +107,7 @@ public class PaidCouponReservationServiceImpl implements PaidCouponReservationSe
     @Override
     public PaidCouponReservationVO claim(Long userId, String requestId) {
         requireIdentity(userId, requestId);
-        return txService.claim(userId, requestId);
+        return batchers.claim(userId, requestId).orElseGet(() -> txService.claim(userId, requestId));
     }
 
     @Override
@@ -144,6 +176,31 @@ public class PaidCouponReservationServiceImpl implements PaidCouponReservationSe
             if (page.size() < batchSize) {
                 return released;
             }
+        }
+    }
+
+    /**
+     * An empty pool makes every concurrent reserve fail, snapshot and retry at once, so
+     * top the pool up in the background once it drops below the watermark. replenish()
+     * still decides the exact count under the inventory lock.
+     */
+    private void refillAhead(List<PaidCouponItemDTO> items) {
+        long watermark = (long) properties.getPoolCapacity() * properties.getRefillAheadPercent() / 100;
+        for (PaidCouponItemDTO item : items) {
+            Long couponId = item.getCouponId();
+            long available = poolHints.estimatedAvailable(couponId);
+            if (available < 0 || available >= watermark || !poolHints.tryStartRefill(couponId)) {
+                continue;
+            }
+            asyncTaskExecutor.execute(() -> {
+                try {
+                    txService.replenish(couponId, properties.getPoolCapacity());
+                } catch (RuntimeException ex) {
+                    log.info("paid coupon refill ahead skipped, couponId={}, reason={}", couponId, ex.getMessage());
+                } finally {
+                    poolHints.refillDone(couponId);
+                }
+            });
         }
     }
 

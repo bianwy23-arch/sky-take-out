@@ -25,6 +25,35 @@
         </choose>
     </select>
 
+    <sql id="rangeScan">
+        SELECT coupon_id AS couponId, unit_id AS unitId
+        FROM paid_coupon_available_unit
+        WHERE coupon_id = #{scan.couponId}
+        <if test="scan.fromUnitId != null">
+            AND unit_id &gt;= #{scan.fromUnitId}
+        </if>
+        <if test="scan.belowUnitId != null">
+            AND unit_id &lt; #{scan.belowUnitId}
+        </if>
+        ORDER BY unit_id
+        LIMIT #{scan.quantity}
+        FOR UPDATE SKIP LOCKED
+    </sql>
+
+    <select id="lockAvailableUnitsInRange" resultType="com.sky.entity.PaidCouponUnit">
+        <choose>
+            <when test="scans.size == 1">
+                <bind name="scan" value="scans[0]"/>
+                <include refid="rangeScan"/>
+            </when>
+            <otherwise>
+                <foreach collection="scans" item="scan" separator=" UNION ALL ">
+                    (<include refid="rangeScan"/>)
+                </foreach>
+            </otherwise>
+        </choose>
+    </select>
+
     <delete id="deleteAvailableUnits">
         DELETE FROM paid_coupon_available_unit
         WHERE (coupon_id, unit_id) IN
@@ -49,10 +78,37 @@
         </foreach>
     </insert>
 
+    <insert id="insertReservedUnitRows">
+        INSERT INTO paid_coupon_reserved_unit(request_id, coupon_id, unit_id)
+        VALUES
+        <foreach collection="rows" item="row" separator=",">
+            (#{row.requestId}, #{row.couponId}, #{row.unitId})
+        </foreach>
+    </insert>
+
     <delete id="deleteReservedByRequest">
         DELETE FROM paid_coupon_reserved_unit
         WHERE request_id = #{requestId}
     </delete>
+
+    <delete id="deleteReservedByRequests">
+        DELETE FROM paid_coupon_reserved_unit
+        WHERE request_id IN
+        <foreach collection="requestIds" item="requestId" open="(" separator="," close=")">
+            #{requestId}
+        </foreach>
+    </delete>
+
+    <select id="countReservedByRequests" resultType="com.sky.dto.PaidCouponReservedCountDTO">
+        SELECT request_id AS requestId, coupon_id AS couponId, CAST(COUNT(*) AS SIGNED) AS quantity
+        FROM paid_coupon_reserved_unit
+        WHERE request_id IN
+        <foreach collection="requestIds" item="requestId" open="(" separator="," close=")">
+            #{requestId}
+        </foreach>
+        GROUP BY request_id, coupon_id
+        ORDER BY request_id, coupon_id
+    </select>
 
     <select id="countReservedByRequest" resultType="com.sky.dto.PaidCouponItemDTO">
         SELECT coupon_id AS couponId, CAST(COUNT(*) AS SIGNED) AS quantity

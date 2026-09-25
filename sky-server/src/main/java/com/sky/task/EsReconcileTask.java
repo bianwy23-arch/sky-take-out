@@ -13,14 +13,19 @@ import com.sky.mapper.OrderMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
+import org.springframework.data.elasticsearch.core.IndexOperations;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
+
+import com.sky.config.AsyncTaskExecutorConfiguration;
 
 /**
  * ES 与 MySQL 定时对账任务
@@ -35,6 +40,8 @@ public class EsReconcileTask {
 
     private static final String ES_DISH_INDEX = "sky_dishes";
     private static final String ES_ORDER_INDEX = "sky_orders";
+    private static final String TASK_LABEL = "task.es-reconcile";
+    private final AtomicBoolean running = new AtomicBoolean(false);
 
     @Autowired
     private DishMapper dishMapper;
@@ -52,11 +59,29 @@ public class EsReconcileTask {
     private ElasticsearchOperations esOperations;
 
     @Scheduled(fixedDelay = 3600000)
+    @Async(AsyncTaskExecutorConfiguration.ASYNC_TASK_EXECUTOR)
     public void reconcile() {
+        long startNanos = System.nanoTime();
+        if (!running.compareAndSet(false, true)) {
+            log.info("async task skipped, label={}, reason=previous-round-running", TASK_LABEL);
+            return;
+        }
         log.info("[EsReconcileTask] 开始 ES 对账");
-        reconcileDishes();
-        reconcileRecentOrders();
-        log.info("[EsReconcileTask] ES 对账结束");
+        try {
+            ensureIndexExists(DishDocument.class, ES_DISH_INDEX);
+            ensureIndexExists(OrderDocument.class, ES_ORDER_INDEX);
+            reconcileDishes();
+            reconcileRecentOrders();
+            log.info("[EsReconcileTask] ES 对账结束");
+            long costMs = (System.nanoTime() - startNanos) / 1_000_000;
+            log.info("async task done, label={}, costMs={}", TASK_LABEL, costMs);
+        } catch (Exception ex) {
+            long costMs = (System.nanoTime() - startNanos) / 1_000_000;
+            log.error("async task failed, label={}, costMs={}", TASK_LABEL, costMs, ex);
+            throw ex;
+        } finally {
+            running.set(false);
+        }
     }
 
     // -------- 菜品对账 --------
@@ -196,5 +221,14 @@ public class EsReconcileTask {
     private Long toEpochMillis(LocalDateTime ldt) {
         if (ldt == null) return null;
         return ldt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+    }
+
+    private void ensureIndexExists(Class<?> documentClass, String indexName) {
+        IndexOperations indexOps = esOperations.indexOps(documentClass);
+        if (indexOps.exists()) {
+            return;
+        }
+        indexOps.createWithMapping();
+        log.info("[EsReconcileTask] 创建 ES 索引成功，index={}", indexName);
     }
 }

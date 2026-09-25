@@ -42,6 +42,8 @@ public class LogisticsStatusMqConsumer {
 
     private static final int MAX_OPTIMISTIC_RETRY = 3;
 
+    private static final String ES_ORDER_INDEX = "sky_orders";
+
     @Autowired
     private LogisticsEventConsumeLogMapper consumeLogMapper;
 
@@ -59,8 +61,6 @@ public class LogisticsStatusMqConsumer {
 
     @Autowired
     private com.sky.websocket.OrderStatusNotifier orderStatusNotifier;
-
-    private static final String ES_ORDER_INDEX = "sky_orders";
 
     @Transactional
     @RabbitListener(queues = "${sky.mq.logistics-queue}")
@@ -158,6 +158,7 @@ public class LogisticsStatusMqConsumer {
             esOperations.update(updateQuery, IndexCoordinates.of(ES_ORDER_INDEX));
         } catch (Exception e) {
             log.error("ES status sync failed in logistics consumer, orderId={}, status={}", orderId, status, e);
+            throw new IllegalStateException("logistics ES sync failed", e);
         }
     }
 
@@ -225,4 +226,3 @@ public class LogisticsStatusMqConsumer {
         return false;
     }
 }
-

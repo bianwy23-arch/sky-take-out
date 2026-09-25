@@ -11,6 +11,7 @@ public class PaidCouponPoolSnapshot implements Serializable {
 
     private Long couponId;
     private Integer remaining;
+    private Integer total;
     private Integer availableCount;
     private Integer reservedCount;
 }

@@ -9,6 +9,7 @@
 
     <select id="snapshot" resultType="com.sky.dto.PaidCouponPoolSnapshot">
         SELECT i.coupon_id AS couponId,
+               i.total AS total,
                i.remaining AS remaining,
                CAST((SELECT COUNT(*) FROM paid_coupon_available_unit a WHERE a.coupon_id = i.coupon_id) AS SIGNED) AS availableCount,
                CAST((SELECT COUNT(*) FROM paid_coupon_reserved_unit r WHERE r.coupon_id = i.coupon_id) AS SIGNED) AS reservedCount
@@ -27,11 +28,23 @@
         FOR UPDATE
     </select>
 
-    <update id="decrementRemaining">
+    <update id="decrementBatch">
         UPDATE paid_coupon_inventory
-        SET remaining = remaining - #{quantity}
-        WHERE coupon_id = #{couponId}
-          AND remaining >= #{quantity}
+        SET remaining = remaining - CASE coupon_id
+        <foreach collection="items" item="item">
+            WHEN #{item.couponId} THEN #{item.quantity}
+        </foreach>
+        ELSE 0 END
+        WHERE coupon_id IN
+        <foreach collection="items" item="item" open="(" separator="," close=")">
+            #{item.couponId}
+        </foreach>
+        AND remaining &gt;= CASE coupon_id
+        <foreach collection="items" item="item">
+            WHEN #{item.couponId} THEN #{item.quantity}
+        </foreach>
+        ELSE 0 END
+        ORDER BY coupon_id
     </update>
 
     <update id="advanceNextUnitId">
